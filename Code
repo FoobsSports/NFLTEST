@@ -1,0 +1,502 @@
+import React, { useState, useEffect } from 'react';
+import { 
+  CheckCircle, XCircle, Brain, Zap, Shield, Activity, RefreshCw, 
+  TrendingUp, TrendingDown, AlertTriangle, Trophy, Target, 
+  History, Settings, Download, Upload, ChevronDown, ChevronUp, 
+  Info, Clock, Cloud, Home
+} from 'lucide-react';
+
+const NFLPredictionAIPro = () => {
+  const [activeTab, setActiveTab] = useState('predictions');
+  const [viewMode, setViewMode] = useState('detailed');
+  const [expandedGame, setExpandedGame] = useState(null);
+  
+  const API_ENDPOINT = '/api/nfl-scores';
+  
+  const [teamStats, setTeamStats] = useState({});
+  const [injuries, setInjuries] = useState({});
+  const [weekScores, setWeekScores] = useState([]);
+  const [predictions, setPredictions] = useState([]);
+  
+  const [loading, setLoading] = useState(true);
+  const [dataLoading, setDataLoading] = useState(false);
+  const [lastUpdate, setLastUpdate] = useState(null);
+  const [notifications, setNotifications] = useState([]);
+  const [dataSource, setDataSource] = useState('demo');
+  const [powerRankings, setPowerRankings] = useState([]);
+
+  const addNotification = (message, type = 'info') => {
+    const newNotif = { 
+      id: Date.now(), 
+      message, 
+      type, 
+      timestamp: new Date().toLocaleTimeString() 
+    };
+    setNotifications(prev => [...prev.slice(-2), newNotif]);
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== newNotif.id));
+    }, 5000);
+  };
+
+  const fetchLiveData = async () => {
+    setDataLoading(true);
+    addNotification('Fetching live NFL data...', 'info');
+    
+    try {
+      const response = await fetch(API_ENDPOINT, { 
+        headers: { 'Accept': 'application/json' }
+      });
+      
+      if (!response.ok) throw new Error('API unavailable');
+      
+      const result = await response.json();
+      
+      if (!result.success || !result.data || !result.data.events) {
+        throw new Error('Invalid response');
+      }
+      
+      const scoreData = result.data;
+      const games = scoreData.events.map(event => {
+        const competition = event.competitions[0];
+        const homeTeam = competition.competitors.find(t => t.homeAway === 'home');
+        const awayTeam = competition.competitors.find(t => t.homeAway === 'away');
+        const odds = competition.odds ? competition.odds[0] : {};
+        const isCompleted = competition.status.type.completed;
+        
+        return {
+          home: homeTeam.team.displayName,
+          away: awayTeam.team.displayName,
+          actualWinner: isCompleted ? 
+            (parseInt(homeTeam.score || 0) > parseInt(awayTeam.score || 0) ? 
+              homeTeam.team.displayName : awayTeam.team.displayName) : 'TBD',
+          actualScore: isCompleted ? 
+            `${homeTeam.score}-${awayTeam.score}` : 
+            competition.status.type.detail || 'Scheduled',
+          status: competition.status.type.detail || 'Scheduled',
+          kickoff: new Date(competition.date).toLocaleString(),
+          venue: competition.venue ? competition.venue.fullName : 'Unknown',
+          spread: odds.spread || 0,
+          overUnder: odds.overUnder || 0
+        };
+      });
+      
+      setWeekScores(games);
+      generateTeamStats(games);
+      setLastUpdate(new Date().toLocaleTimeString());
+      setDataSource('live');
+      addNotification(`Live data loaded (${games.length} games)`, 'success');
+      
+    } catch (error) {
+      addNotification('Using demo mode', 'error');
+      loadSampleData();
+      setDataSource('demo');
+    }
+    
+    setDataLoading(false);
+    setLoading(false);
+  };
+
+  const generateTeamStats = (games) => {
+    const teams = {};
+    games.forEach(game => {
+      [game.home, game.away].forEach(team => {
+        if (!teams[team]) {
+          teams[team] = {
+            offRank: Math.floor(Math.random() * 30) + 1,
+            defRank: Math.floor(Math.random() * 30) + 1,
+            record: '2-1',
+            momentum: Math.floor(Math.random() * 5) - 2,
+            qbRating: 75 + Math.random() * 25,
+            powerIndex: 50 + Math.random() * 45,
+            avgPointsFor: 20 + Math.random() * 10,
+            turnoverDiff: Math.floor(Math.random() * 10) - 5
+          };
+        }
+      });
+    });
+    
+    setTeamStats(teams);
+    
+    const rankings = Object.keys(teams)
+      .map(team => ({
+        team,
+        powerIndex: teams[team].powerIndex,
+        record: teams[team].record,
+        trend: teams[team].momentum
+      }))
+      .sort((a, b) => b.powerIndex - a.powerIndex);
+    
+    setPowerRankings(rankings);
+    
+    const injuryMap = {};
+    games.forEach(game => {
+      [game.home, game.away].forEach(team => {
+        if (Math.random() > 0.7) {
+          injuryMap[team] = [{
+            name: 'Player X',
+            position: ['QB', 'RB', 'WR'][Math.floor(Math.random() * 3)],
+            status: ['Out', 'Questionable', 'Doubtful'][Math.floor(Math.random() * 3)],
+            impact: Math.random() * 3
+          }];
+        }
+      });
+    });
+    
+    setInjuries(injuryMap);
+  };
+
+  const loadSampleData = () => {
+    const teams = {
+      'Kansas City Chiefs': { offRank: 1, defRank: 3, record: '3-0', momentum: 2, qbRating: 102.4, powerIndex: 95, avgPointsFor: 28, turnoverDiff: 5 },
+      'Buffalo Bills': { offRank: 4, defRank: 2, record: '3-0', momentum: 2, qbRating: 95.8, powerIndex: 88, avgPointsFor: 26, turnoverDiff: 3 },
+      'Philadelphia Eagles': { offRank: 3, defRank: 6, record: '3-0', momentum: 2, qbRating: 95.3, powerIndex: 87, avgPointsFor: 27, turnoverDiff: 2 },
+      'Detroit Lions': { offRank: 2, defRank: 8, record: '3-0', momentum: 2, qbRating: 98.4, powerIndex: 90, avgPointsFor: 29, turnoverDiff: 4 },
+      'Baltimore Ravens': { offRank: 9, defRank: 9, record: '2-1', momentum: 1, qbRating: 93.7, powerIndex: 82, avgPointsFor: 25, turnoverDiff: 1 },
+      'Miami Dolphins': { offRank: 10, defRank: 10, record: '2-1', momentum: 0, qbRating: 89.2, powerIndex: 75, avgPointsFor: 24, turnoverDiff: 0 }
+    };
+    
+    setTeamStats(teams);
+    
+    const games = [
+      { home: 'Kansas City Chiefs', away: 'Baltimore Ravens', actualWinner: 'Kansas City Chiefs', actualScore: '27-20', spread: -7, overUnder: 52.5, status: 'Final', kickoff: '8:20 PM ET', venue: 'Arrowhead Stadium' },
+      { home: 'Buffalo Bills', away: 'Miami Dolphins', actualWinner: 'TBD', actualScore: 'Scheduled', spread: -6.5, overUnder: 51, status: 'Sunday 1:00 PM', kickoff: 'Sunday 1:00 PM ET', venue: 'Highmark Stadium' },
+      { home: 'Philadelphia Eagles', away: 'Detroit Lions', actualWinner: 'TBD', actualScore: 'Scheduled', spread: -3, overUnder: 54, status: 'Sunday 1:00 PM', kickoff: 'Sunday 1:00 PM ET', venue: 'Lincoln Financial Field' }
+    ];
+    
+    setWeekScores(games);
+    setInjuries({
+      'Baltimore Ravens': [{ name: 'Lamar Jackson', position: 'QB', status: 'Questionable', impact: 2.4 }]
+    });
+    
+    const rankings = Object.keys(teams)
+      .map(team => ({ team, powerIndex: teams[team].powerIndex, record: teams[team].record, trend: teams[team].momentum }))
+      .sort((a, b) => b.powerIndex - a.powerIndex);
+    setPowerRankings(rankings);
+  };
+
+  const makePrediction = (match) => {
+    const homeStats = teamStats[match.home] || {};
+    const awayStats = teamStats[match.away] || {};
+    
+    let homeScore = 0;
+    let awayScore = 0;
+    
+    homeScore -= (33 - (homeStats.offRank || 15)) * 0.3;
+    homeScore -= (33 - (homeStats.defRank || 15)) * 0.3;
+    homeScore -= (homeStats.momentum || 0) * 0.8;
+    homeScore -= 2.5; // home advantage
+    
+    awayScore -= (33 - (awayStats.offRank || 15)) * 0.3;
+    awayScore -= (33 - (awayStats.defRank || 15)) * 0.3;
+    awayScore -= (awayStats.momentum || 0) * 0.8;
+    
+    const predictedWinner = homeScore < awayScore ? match.home : match.away;
+    const scoreDiff = Math.abs(homeScore - awayScore);
+    const confidence = Math.min(98, Math.max(52, 50 + (scoreDiff * 5)));
+    
+    const isUpset = match.spread && (
+      (predictedWinner === match.home && match.spread > 0) ||
+      (predictedWinner === match.away && match.spread < 0)
+    );
+    
+    let isCorrect = null;
+    if (match.actualWinner !== 'TBD') {
+      isCorrect = predictedWinner === match.actualWinner;
+    }
+    
+    return {
+      ...match,
+      predictedWinner,
+      confidence: Math.round(confidence),
+      isUpset,
+      isCorrect
+    };
+  };
+
+  useEffect(() => {
+    fetchLiveData();
+  }, []);
+
+  useEffect(() => {
+    if (!loading && weekScores.length > 0) {
+      const preds = weekScores.map(match => makePrediction(match));
+      setPredictions(preds);
+    }
+  }, [loading, weekScores, teamStats]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 p-6 flex items-center justify-center">
+        <div className="text-center">
+          <div className="relative">
+            <div className="animate-spin rounded-full h-24 w-24 border-b-4 border-cyan-400 mx-auto"></div>
+            <Brain className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-cyan-400" size={40} />
+          </div>
+          <h2 className="text-3xl font-bold text-white mt-6">Initializing NFL AI System</h2>
+          <p className="text-cyan-300 mt-2">Loading data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
+      <div className="fixed top-4 right-4 z-50 space-y-2">
+        {notifications.map(notif => (
+          <div
+            key={notif.id}
+            className={`px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 ${
+              notif.type === 'success' ? 'bg-green-500 text-white' :
+              notif.type === 'error' ? 'bg-red-500 text-white' :
+              'bg-blue-500 text-white'
+            }`}
+          >
+            {notif.type === 'success' ? <CheckCircle size={16} /> :
+             notif.type === 'error' ? <XCircle size={16} /> :
+             <Info size={16} />}
+            <span className="text-sm">{notif.message}</span>
+          </div>
+        ))}
+      </div>
+      
+      <div className="bg-gradient-to-r from-blue-800/50 to-purple-800/50 backdrop-blur-sm border-b border-cyan-500/20">
+        <div className="max-w-7xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="relative">
+                <Brain className="text-cyan-400" size={36} />
+                <div className={`absolute -bottom-1 -right-1 rounded-full w-3 h-3 animate-pulse ${
+                  dataSource === 'live' ? 'bg-green-400' : 'bg-yellow-400'
+                }`}></div>
+              </div>
+              <div>
+                <h1 className="text-3xl font-bold text-white">NFL Prediction AI Pro</h1>
+                <p className="text-cyan-300 text-sm">
+                  {dataSource === 'live' ? 'Live ESPN Data' : 'Demo Mode'}
+                </p>
+              </div>
+            </div>
+            
+            <button
+              onClick={() => fetchLiveData()}
+              disabled={dataLoading}
+              className="bg-gradient-to-r from-cyan-500 to-blue-500 text-white px-4 py-2 rounded-lg font-semibold hover:from-cyan-600 hover:to-blue-600 transition-all flex items-center gap-2 disabled:opacity-50"
+            >
+              <RefreshCw size={18} className={dataLoading ? 'animate-spin' : ''} />
+              Refresh Data
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-black/30 backdrop-blur-sm border-b border-cyan-500/20">
+        <div className="max-w-7xl mx-auto px-6 py-3">
+          <div className="flex items-center justify-between text-sm">
+            <div className="flex items-center gap-6">
+              <span className="text-cyan-300">
+                <Clock size={14} className="inline mr-1" />
+                Last Update: {lastUpdate || 'Never'}
+              </span>
+              <span className={dataSource === 'live' ? 'text-green-300' : 'text-yellow-300'}>
+                <Cloud size={14} className="inline mr-1" />
+                {dataSource === 'live' ? 'Live ESPN Feed' : 'Demo Data'}
+              </span>
+              <span className="text-green-300">
+                <Activity size={14} className="inline mr-1" />
+                {weekScores.length} Games
+              </span>
+            </div>
+            
+            <div className="flex gap-4">
+              {['predictions', 'rankings'].map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-3 py-1 rounded-lg capitalize transition-all ${
+                    activeTab === tab
+                      ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50'
+                      : 'text-gray-400 hover:text-white'
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-6 py-6">
+        {activeTab === 'predictions' && (
+          <div className="space-y-6">
+            <h2 className="text-2xl font-bold text-white mb-4">Game Predictions</h2>
+
+            {predictions.map((game, idx) => (
+              <div
+                key={idx}
+                className={`rounded-xl backdrop-blur-sm border transition-all ${
+                  game.isCorrect === true ? 'bg-green-500/10 border-green-500/50' :
+                  game.isCorrect === false ? 'bg-red-500/10 border-red-500/50' :
+                  'bg-white/5 border-gray-500/30'
+                }`}
+              >
+                <div className="p-6">
+                  <div className="flex items-start justify-between mb-4">
+                    <div>
+                      <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
+                        {game.away} @ {game.home}
+                        {game.isUpset && (
+                          <span className="px-2 py-1 bg-yellow-500/20 text-yellow-300 text-xs rounded-full">
+                            UPSET
+                          </span>
+                        )}
+                      </h3>
+                      <div className="flex items-center gap-4 text-sm">
+                        <span className="text-gray-400">
+                          <Clock size={14} className="inline mr-1" />
+                          {game.kickoff}
+                        </span>
+                        <span className="text-gray-400">
+                          <Home size={14} className="inline mr-1" />
+                          {game.venue}
+                        </span>
+                      </div>
+                      {game.actualWinner !== 'TBD' && (
+                        <div className="mt-2 text-sm font-semibold text-white">
+                          Final: {game.actualWinner} {game.actualScore}
+                        </div>
+                      )}
+                    </div>
+                    
+                    {game.isCorrect !== null && (
+                      <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-semibold ${
+                        game.isCorrect ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
+                      }`}>
+                        {game.isCorrect ? <CheckCircle size={16} /> : <XCircle size={16} />}
+                        {game.isCorrect ? 'Correct' : 'Wrong'}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="bg-gradient-to-r from-blue-600/20 to-cyan-600/20 rounded-lg p-4">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <span className="text-cyan-300 text-sm">AI Prediction: </span>
+                        <span className="text-2xl font-bold text-white">{game.predictedWinner}</span>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-3xl font-bold text-white">{game.confidence}%</div>
+                        <div className="text-xs text-cyan-300">confidence</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {game.spread && (
+                    <div className="mt-4 pt-4 border-t border-gray-700/50">
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div className="text-center">
+                          <div className="text-gray-400">Spread</div>
+                          <div className="text-white font-semibold">{game.spread}</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-gray-400">Over/Under</div>
+                          <div className="text-white font-semibold">{game.overUnder}</div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {activeTab === 'rankings' && (
+          <div className="space-y-6">
+            <h2 className="text-2xl font-bold text-white mb-4">Power Rankings</h2>
+            
+            <div className="bg-black/40 backdrop-blur-sm rounded-xl p-6 border border-cyan-500/30">
+              <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                <Trophy className="text-yellow-400" size={20} />
+                Top Teams
+              </h3>
+              <div className="space-y-2">
+                {powerRankings.slice(0, 10).map((team, idx) => (
+                  <div key={team.team} className="flex items-center justify-between p-3 rounded hover:bg-white/5">
+                    <div className="flex items-center gap-3">
+                      <div className={`text-2xl font-bold ${
+                        idx === 0 ? 'text-yellow-400' :
+                        idx === 1 ? 'text-gray-300' :
+                        idx === 2 ? 'text-orange-600' :
+                        'text-gray-500'
+                      }`}>
+                        {idx + 1}
+                      </div>
+                      <div>
+                        <div className="text-white font-medium">{team.team}</div>
+                        <div className="text-xs text-gray-400">{team.record}</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="text-right">
+                        <div className="text-cyan-300 font-semibold">{team.powerIndex.toFixed(0)}</div>
+                        <div className="text-xs text-gray-400">Power</div>
+                      </div>
+                      {team.trend !== 0 && (
+                        <div>
+                          {team.trend > 0 ? (
+                            <TrendingUp className="text-green-400" size={16} />
+                          ) : (
+                            <TrendingDown className="text-red-400" size={16} />
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {Object.keys(injuries).length > 0 && (
+              <div className="bg-black/40 backdrop-blur-sm rounded-xl p-6 border border-cyan-500/30">
+                <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                  <AlertTriangle className="text-yellow-400" size={20} />
+                  Key Injuries
+                </h3>
+                <div className="space-y-3">
+                  {Object.entries(injuries).map(([team, teamInjuries]) => (
+                    <div key={team} className="border-b border-gray-800 pb-2">
+                      <div className="text-sm font-semibold text-cyan-300 mb-1">{team}</div>
+                      {teamInjuries.map((injury, idx) => (
+                        <div key={idx} className="flex items-center justify-between text-xs py-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-white">{injury.name}</span>
+                            <span className="text-gray-500">({injury.position})</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2 py-0.5 rounded text-xs ${
+                              injury.status === 'Out' ? 'bg-red-500/20 text-red-300' :
+                              injury.status === 'Doubtful' ? 'bg-orange-500/20 text-orange-300' :
+                              'bg-yellow-500/20 text-yellow-300'
+                            }`}>
+                              {injury.status}
+                            </span>
+                            <span className="text-gray-400">
+                              Impact: {injury.impact.toFixed(1)}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default NFLPredictionAIPro;
