@@ -11,7 +11,7 @@ const NFLPredictionAIPro = () => {
   const [viewMode, setViewMode] = useState('detailed');
   const [expandedGame, setExpandedGame] = useState(null);
   
-  const API_ENDPOINT = '/api/nfl-scores';
+  const API_ENDPOINT = '/.netlify/functions/nfl-scores';
   
   const [teamStats, setTeamStats] = useState({});
   const [injuries, setInjuries] = useState({});
